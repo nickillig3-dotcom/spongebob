@@ -1,8 +1,9 @@
 import argparse
 import os
+import json
 import pandas as pd
-from datetime import datetime, timezone
 from ..backtest.engine import SimpleFuturesBacktester
+from ..strategy.mtf_momo import Params
 
 def load_1m_csv(symbol: str, base_dir: str = "data/raw/binance") -> pd.DataFrame:
     path = os.path.join(base_dir, symbol, "1m.csv")
@@ -19,14 +20,21 @@ def slice_df(df: pd.DataFrame, start: str, end: str) -> pd.DataFrame:
     return df.loc[(df.index >= s) & (df.index <= e)].copy()
 
 def main():
-    parser = argparse.ArgumentParser(description="Run backtest for baseline strategy.")
-    parser.add_argument("--symbols", nargs="+", required=True, help="e.g. BTCUSDT ETHUSDT")
-    parser.add_argument("--start", required=True, help="UTC start date, e.g. 2023-01-01")
-    parser.add_argument("--end", required=True, help="UTC end date, e.g. 2023-03-01")
+    parser = argparse.ArgumentParser(description="Run backtest for strategy.")
+    parser.add_argument("--symbols", nargs="+", required=True)
+    parser.add_argument("--start", required=True)
+    parser.add_argument("--end", required=True)
     parser.add_argument("--equity", type=float, default=10000.0)
+    parser.add_argument("--params_file", type=str, default=None, help="JSON file with Params overrides")
     args = parser.parse_args()
 
-    bt = SimpleFuturesBacktester(equity=args.equity)
+    params = Params()
+    if args.params_file:
+        with open(args.params_file, "r", encoding="utf-8") as f:
+            overrides = json.load(f)
+        params = Params(**overrides)
+
+    bt = SimpleFuturesBacktester(equity=args.equity, params=params)
     curves = []
     all_trades = []
     metrics_list = []
@@ -53,14 +61,9 @@ def main():
     out_dir = os.path.join("reports", "latest")
     os.makedirs(out_dir, exist_ok=True)
 
-    eq_all = pd.concat(curves)
-    trades_all = pd.concat(all_trades) if all_trades else pd.DataFrame()
-    metrics_df = pd.DataFrame(metrics_list)
-
-    eq_all.to_csv(os.path.join(out_dir, "equity.csv"))
-    trades_all.to_csv(os.path.join(out_dir, "trades.csv"), index=False)
-    metrics_df.to_json(os.path.join(out_dir, "metrics.json"), orient="records", indent=2)
-
+    pd.concat(curves).to_csv(os.path.join(out_dir, "equity.csv"))
+    (pd.concat(all_trades) if all_trades else pd.DataFrame()).to_csv(os.path.join(out_dir, "trades.csv"), index=False)
+    pd.DataFrame(metrics_list).to_json(os.path.join(out_dir, "metrics.json"), orient="records", indent=2)
     print("Saved reports to:", out_dir)
 
 if __name__ == "__main__":
