@@ -17,11 +17,13 @@ def atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
     return tr.ewm(span=period, adjust=False).mean()
 
 def resample_ohlcv(df: pd.DataFrame, rule: str) -> pd.DataFrame:
-    o = df['open'].resample(rule).first()
-    h = df['high'].resample(rule).max()
-    l = df['low'].resample(rule).min()
-    c = df['close'].resample(rule).last()
-    v = df['volume'].resample(rule).sum()
+    # Pandas: 'T'/'H' deprecated → auf 'min'/'h' mappen
+    freq = rule.replace('T', 'min').replace('H', 'h')
+    o = df['open'].resample(freq).first()
+    h = df['high'].resample(freq).max()
+    l = df['low'].resample(freq).min()
+    c = df['close'].resample(freq).last()
+    v = df['volume'].resample(freq).sum()
     out = pd.concat([o, h, l, c, v], axis=1)
     out.columns = ['open','high','low','close','volume']
     return out.dropna()

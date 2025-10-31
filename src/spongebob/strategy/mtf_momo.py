@@ -28,10 +28,10 @@ class MTFMomentum:
 
     def _prep_multitimeframe(self, df_1m: pd.DataFrame) -> Dict[str, pd.DataFrame]:
         # Build higher timeframe frames
-        df_3m  = resample_ohlcv(df_1m, '3T')
-        df_15m = resample_ohlcv(df_1m, '15T')
-        df_30m = resample_ohlcv(df_1m, '30T')
-        df_1h  = resample_ohlcv(df_1m, '1H')
+        df_3m  = resample_ohlcv(df_1m, '3min')
+        df_15m = resample_ohlcv(df_1m, '15min')
+        df_30m = resample_ohlcv(df_1m, '30min')
+        df_1h  = resample_ohlcv(df_1m, '1h')
         return {"1m": df_1m, "3m": df_3m, "15m": df_15m, "30m": df_30m, "1h": df_1h}
 
     def generate(self, df_1m: pd.DataFrame) -> pd.DataFrame:
@@ -80,7 +80,7 @@ class MTFMomentum:
         signal = signal.mask(short_trend & cross_down, -1)
 
         # Stops & takes based on 3m ATR
-        atr3 = aligned["3m_atr"].fillna(method='ffill')
+        atr3 = aligned["3m_atr"].ffill()
         stop_dist = self.p.atr_mult_stop * atr3
         take_dist = self.p.tp_rr * stop_dist
 
