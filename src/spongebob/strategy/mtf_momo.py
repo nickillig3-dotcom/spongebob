@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Dict, Tuple
+from typing import Dict
 import pandas as pd
 import numpy as np
 
@@ -15,19 +15,20 @@ class Params:
     atr_period_3m: int = 14
     atr_mult_stop: float = 2.0
     tp_rr: float = 1.5
+    # Qualitätsfilter (neu)
+    min_atr_pct: float = 0.0012      # 0.12% auf 3m
+    min_ema_gap_pct: float = 0.0004  # 0.04% Gap auf 1m
 
 class MTFMomentum:
     """
-    Returns a DataFrame on the 1m grid with columns:
-    - signal: 1 for long entry, -1 for short entry, 0 otherwise
-    - stop: stop price for new entry
-    - take: take-profit price for new entry
+    Liefert auf 1m-Grid:
+    - signal: 1 long / -1 short / 0 flat
+    - stop, take: für neue Einstiege
     """
     def __init__(self, params: Params = Params()):
         self.p = params
 
     def _prep_multitimeframe(self, df_1m: pd.DataFrame) -> Dict[str, pd.DataFrame]:
-        # Build higher timeframe frames
         df_3m  = resample_ohlcv(df_1m, '3min')
         df_15m = resample_ohlcv(df_1m, '15min')
         df_30m = resample_ohlcv(df_1m, '30min')
@@ -37,7 +38,6 @@ class MTFMomentum:
     def generate(self, df_1m: pd.DataFrame) -> pd.DataFrame:
         frames = self._prep_multitimeframe(df_1m.copy())
 
-        # Indicators
         f1 = frames["1m"]
         f1["ema_fast"] = ema(f1["close"], self.p.ema_fast_1m)
         f1["ema_slow"] = ema(f1["close"], self.p.ema_slow_1m)
@@ -51,7 +51,6 @@ class MTFMomentum:
             f = frames[key]
             f["ema_trend"] = ema(f["close"], self.p.ema_trend_long)
 
-        # Align higher TFs down to 1m grid via forward-fill
         aligned = f1[["open","high","low","close","volume"]].copy()
         aligned["ema_fast_1m"] = f1["ema_fast"]
         aligned["ema_slow_1m"] = f1["ema_slow"]
@@ -62,7 +61,6 @@ class MTFMomentum:
         for key in ["15m","30m","1h"]:
             aligned[f"{key}_ema_trend"] = frames[key]["ema_trend"].reindex(aligned.index, method='ffill')
 
-        # Entry conditions
         long_trend  = (aligned["3m_ema_fast"] > aligned["3m_ema_slow"]) & \
                       (aligned["close"] > aligned["15m_ema_trend"]) & \
                       (aligned["close"] > aligned["30m_ema_trend"]) & \
@@ -75,23 +73,23 @@ class MTFMomentum:
         cross_up   = (aligned["ema_fast_1m"] > aligned["ema_slow_1m"]) & (aligned["ema_fast_1m"].shift(1) <= aligned["ema_slow_1m"].shift(1))
         cross_down = (aligned["ema_fast_1m"] < aligned["ema_slow_1m"]) & (aligned["ema_fast_1m"].shift(1) >= aligned["ema_slow_1m"].shift(1))
 
-        signal = pd.Series(0, index=aligned.index)
-        signal = signal.mask(long_trend & cross_up, 1)
-        signal = signal.mask(short_trend & cross_down, -1)
-
-        # Stops & takes based on 3m ATR
+        # Qualitätsfilter (Volatilität + Momentumstärke)
         atr3 = aligned["3m_atr"].ffill()
+        ema_gap_pct = (aligned["ema_fast_1m"] - aligned["ema_slow_1m"]).abs() / aligned["close"]
+        vol_ok = (atr3 / aligned["close"]) >= self.p.min_atr_pct
+        gap_ok = ema_gap_pct >= self.p.min_ema_gap_pct
+
+        signal = pd.Series(0, index=aligned.index)
+        signal = signal.mask(long_trend & cross_up & vol_ok & gap_ok, 1)
+        signal = signal.mask(short_trend & cross_down & vol_ok & gap_ok, -1)
+
         stop_dist = self.p.atr_mult_stop * atr3
         take_dist = self.p.tp_rr * stop_dist
 
-        stop_price = pd.Series(np.nan, index=aligned.index)
-        take_price = pd.Series(np.nan, index=aligned.index)
-
-        # When a long entry triggers, stop below; short entry stop above
         close = aligned["close"]
-        stop_price = np.where(signal == 1, close - stop_dist, 
+        stop_price = np.where(signal == 1, close - stop_dist,
                        np.where(signal == -1, close + stop_dist, np.nan))
-        take_price = np.where(signal == 1, close + take_dist, 
+        take_price = np.where(signal == 1, close + take_dist,
                        np.where(signal == -1, close - take_dist, np.nan))
 
         out = aligned.copy()
