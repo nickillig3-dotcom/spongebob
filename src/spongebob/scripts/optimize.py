@@ -25,11 +25,12 @@ def sample_params(rng: random.Random) -> Params:
         ema_slow_3m=c([34,55,89]),
         ema_trend_long=c([150,200,233]),
         atr_period_3m=c([10,14,20]),
-        atr_mult_stop=c([1.5,2.0,2.5,3.0]),
-        tp_rr=c([1.0,1.2,1.5,2.0]),
-        min_atr_pct=c([0.0008,0.0012,0.0018,0.0025]),
-        min_ema_gap_pct=c([0.0002,0.0004,0.0008]),
+        atr_mult_stop=c([1.2,1.5,2.0,2.5]),
+        tp_rr=c([0.8,1.0,1.2,1.5,2.0]),
+        min_atr_pct=c([0.0001,0.0002,0.0004,0.0008,0.0012,0.0018]),
+        min_ema_gap_pct=c([0.0001,0.0002,0.0004,0.0008]),
     )
+
 
 def parse_hours(s: str):
     if not s:
