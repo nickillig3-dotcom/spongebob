@@ -35,7 +35,6 @@ with col2:
     if os.path.exists(tr_path) and os.path.getsize(tr_path) > 0:
         try:
             trades = pd.read_csv(tr_path)
-            # Datumsfelder nur parsen, wenn vorhanden
             for col in ("open_time", "close_time"):
                 if col in trades.columns:
                     trades[col] = pd.to_datetime(trades[col], utc=True, errors="coerce")
@@ -45,3 +44,4 @@ with col2:
             st.warning(f"Kann trades.csv nicht lesen: {e}")
     else:
         st.info("trades.csv fehlt oder ist leer – Backtest hat keine Trades erzeugt.")
+
