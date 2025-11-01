@@ -11,13 +11,14 @@ class Params:
     ema_slow_1m: int = 21
     ema_fast_3m: int = 21
     ema_slow_3m: int = 55
-    ema_trend_long: int = 200  # used on 15m/30m/1h
+    ema_trend_long: int = 200
     atr_period_3m: int = 14
     atr_mult_stop: float = 2.0
     tp_rr: float = 1.5
-    # Qualitätsfilter (neu)
-    min_atr_pct: float = 0.0012      # 0.12% auf 3m
-    min_ema_gap_pct: float = 0.0004  # 0.04% Gap auf 1m
+    min_atr_pct: float = 0.0012
+    min_ema_gap_pct: float = 0.0004
+    trend_logic: str = "AND"   # NEU: "AND" (konservativ) oder "OR" (mehr Trades)
+
 
 class MTFMomentum:
     """
@@ -62,6 +63,7 @@ class MTFMomentum:
             aligned[f"{key}_ema_trend"] = frames[key]["ema_trend"].reindex(aligned.index, method='ffill')
 
         # Trend-Votes über 15m/30m/1h (Mehrheit genügt)
+        # Trend-Konditionen (flexibel via trend_logic)
         votes_long = (
             (aligned["close"] > aligned["15m_ema_trend"]).astype(int) +
             (aligned["close"] > aligned["30m_ema_trend"]).astype(int) +
@@ -73,8 +75,13 @@ class MTFMomentum:
             (aligned["close"] < aligned["1h_ema_trend"]).astype(int)
         )
 
-        long_trend  = (aligned["3m_ema_fast"] > aligned["3m_ema_slow"]) & (votes_long >= 2)
-        short_trend = (aligned["3m_ema_fast"] < aligned["3m_ema_slow"]) & (votes_short >= 2)
+        if self.p.trend_logic.upper() == "OR":
+            long_ctx  = (aligned["3m_ema_fast"] > aligned["3m_ema_slow"]) | (votes_long >= 2)
+            short_ctx = (aligned["3m_ema_fast"] < aligned["3m_ema_slow"]) | (votes_short >= 2)
+        else:  # "AND"
+            long_ctx  = (aligned["3m_ema_fast"] > aligned["3m_ema_slow"]) & (votes_long >= 2)
+            short_ctx = (aligned["3m_ema_fast"] < aligned["3m_ema_slow"]) & (votes_short >= 2)
+
 
 
         cross_up   = (aligned["ema_fast_1m"] > aligned["ema_slow_1m"]) & (aligned["ema_fast_1m"].shift(1) <= aligned["ema_slow_1m"].shift(1))
@@ -87,8 +94,8 @@ class MTFMomentum:
         gap_ok = ema_gap_pct >= self.p.min_ema_gap_pct
 
         signal = pd.Series(0, index=aligned.index)
-        signal = signal.mask(long_trend & cross_up & vol_ok & gap_ok, 1)
-        signal = signal.mask(short_trend & cross_down & vol_ok & gap_ok, -1)
+        signal = signal.mask(long_ctx  & cross_up  & vol_ok & gap_ok,  1)
+        signal = signal.mask(short_ctx & cross_down & vol_ok & gap_ok, -1)
 
         stop_dist = self.p.atr_mult_stop * atr3
         take_dist = self.p.tp_rr * stop_dist
