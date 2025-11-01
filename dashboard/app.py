@@ -20,13 +20,24 @@ mt_path = os.path.join(report_dir, "metrics.json")
 st.subheader("Equity Curve")
 tab1, tab2 = st.tabs(["Portfolio", "Per Symbol"])
 
+# ✅ Neuer, robuster Portfolio-Tab
 with tab1:
     if os.path.exists(port_path):
-        peq = pd.read_csv(port_path, parse_dates=["time"])
-        st.line_chart(peq.set_index("time")["equity"])
-        if os.path.exists(port_metrics_path):
-            pm = pd.read_json(port_metrics_path, typ="series")
-            st.caption(f"Portfolio: Sharpe {pm['sharpe']:.3f} | MDD {pm['max_drawdown']:.2%} | Final {pm['final_equity']:.2f}")
+        try:
+            peq = pd.read_csv(port_path)
+            if "time" not in peq.columns:
+                # Fallback: Index-Spalte ohne Namen
+                idx_cols = [c for c in peq.columns if c.lower().startswith("unnamed")]
+                if idx_cols:
+                    peq = peq.rename(columns={idx_cols[0]: "time"})
+            peq["time"] = pd.to_datetime(peq["time"], utc=True, errors="coerce")
+            peq = peq.dropna(subset=["time"]).sort_values("time")
+            st.line_chart(peq.set_index("time")["equity"])
+            if os.path.exists(port_metrics_path):
+                pm = pd.read_json(port_metrics_path, typ="series")
+                st.caption(f"Portfolio: Sharpe {pm.get('sharpe',0):.3f} | MDD {pm.get('max_drawdown',0):.2%} | Final {pm.get('final_equity',0):.2f}")
+        except Exception as e:
+            st.warning(f"Kann portfolio_equity.csv nicht lesen: {e}")
     else:
         st.info("portfolio_equity.csv fehlt – erst `python -m spongebob.scripts.portfolio` ausführen.")
 
@@ -36,6 +47,7 @@ with tab2:
         st.line_chart(eq.set_index("time")["equity"])
     else:
         st.info("equity.csv nicht gefunden – Backtest zuerst laufen lassen.")
+
 
 # Zwei Spalten für Metriken & Trades
 col1, col2 = st.columns(2)

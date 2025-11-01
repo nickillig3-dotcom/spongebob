@@ -28,8 +28,8 @@ def main():
     merged = merged.set_index("time").ffill()
 
     # Equal-Weight-Portfolio
-    merged["portfolio_nav"] = merged.mean(axis=1)
     peq = (merged["portfolio_nav"] * args.equity0).rename("equity").to_frame()
+    peq.index.name = "time"      # <--- NEU: Index benennen
     peq.to_csv(os.path.join(args.report_dir, "portfolio_equity.csv"))
 
     # Kennzahlen (täglich)
