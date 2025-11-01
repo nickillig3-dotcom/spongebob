@@ -2,6 +2,7 @@ import argparse, os, json, random, pandas as pd, numpy as np
 from datetime import datetime
 from ..backtest.engine import SimpleFuturesBacktester
 from ..strategy.mtf_momo import Params
+from ..config import SETTINGS
 
 def load_1m(symbol, base_dir="data/raw/binance"):
     path = os.path.join(base_dir, symbol, "1m.csv")
@@ -24,11 +25,22 @@ def sample_params(rng: random.Random) -> Params:
         ema_slow_3m=c([34,55,89]),
         ema_trend_long=c([150,200,233]),
         atr_period_3m=c([10,14,20]),
-        atr_mult_stop=c([1.5,2.0,2.5]),
-        tp_rr=c([1.2,1.5,2.0]),
-        min_atr_pct=c([0.0008,0.0012,0.0018]),
+        atr_mult_stop=c([1.5,2.0,2.5,3.0]),
+        tp_rr=c([1.0,1.2,1.5,2.0]),
+        min_atr_pct=c([0.0008,0.0012,0.0018,0.0025]),
         min_ema_gap_pct=c([0.0002,0.0004,0.0008]),
     )
+
+def parse_hours(s: str):
+    if not s:
+        return []
+    s = s.strip()
+    if "-" in s:
+        a, b = [int(x) for x in s.split("-", 1)]
+        if b < a:
+            return list(range(a,24)) + list(range(0,b+1))
+        return list(range(a,b+1))
+    return [int(x) for x in s.split(",") if x != ""]
 
 def score(metrics_is, metrics_oos):
     if not metrics_is or not metrics_oos:
@@ -37,12 +49,15 @@ def score(metrics_is, metrics_oos):
     sr_oos = np.mean([m["sharpe"] for m in metrics_oos])
     mdd_is = np.mean([m["max_drawdown"] for m in metrics_is])
     mdd_oos= np.mean([m["max_drawdown"] for m in metrics_oos])
-    n_tr   = np.sum([m["n_trades"] for m in metrics_is])
+    n_tr   = np.sum([m["n_trades"] for m in metrics_is])  # nur IS zählte vorher
     pen = 0.0
+    # Drawdown-Strafen
     pen += max(0.0, abs(mdd_is)  - 0.25) * 2.0
     pen += max(0.0, abs(mdd_oos) - 0.30) * 3.0
-    if n_tr < 120: pen += (120 - n_tr) / 60.0
-    return float(sr_is + 0.5*sr_oos - pen)
+    # Mindest-Tradezahl (weniger hart)
+    if n_tr < 80:
+        pen += (80 - n_tr) / 120.0
+    return float(sr_is + 0.7*sr_oos - pen)
 
 def main():
     ap = argparse.ArgumentParser(description="Random-search optimizer (IS/OOS).")
@@ -53,7 +68,13 @@ def main():
     ap.add_argument("--n-trials", type=int, default=150)
     ap.add_argument("--equity", type=float, default=10000.0)
     ap.add_argument("--seed", type=int, default=42)
+    ap.add_argument("--cooldown", type=int, default=0, help="Cooldown in 1m bars after exit")
+    ap.add_argument("--hours", type=str, default="", help="Trading hours, e.g., '7-22' or '0,1,2,3,...'")
     args = ap.parse_args()
+
+    # Settings-Gates setzen
+    SETTINGS.cooldown_bars = int(args.cooldown)
+    SETTINGS.trade_hours   = parse_hours(args.hours)
 
     rng = random.Random(args.seed)
     data = {sym: load_1m(sym) for sym in args.symbols}
@@ -83,14 +104,12 @@ def main():
         row = {"trial": t, "score": s, "params": p.__dict__,
                "is_metrics": metrics_is, "oos_metrics": metrics_oos}
         rows.append(row)
-
         if s > best["score"]:
             best = row
 
         if t % 10 == 0:
             print(f"Trial {t}/{args.n_trials}  best_score={best['score']:.3f}")
 
-    # persist results
     pd.DataFrame([{"trial": r["trial"], "score": r["score"], **r["params"]} for r in rows]) \
       .to_csv(os.path.join(outdir, "results.csv"), index=False)
     with open(os.path.join(outdir, "best_params.json"), "w", encoding="utf-8") as f:
