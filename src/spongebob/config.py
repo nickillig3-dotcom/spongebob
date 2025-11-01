@@ -20,5 +20,15 @@ class Settings(BaseModel):
     slippage_ticks: int = 1
     tick_size: float = 0.1  # konservativ
     lot_size: float = 0.001
+class Settings(BaseModel):
+    fees: Fees = Fees()
+    risk: Risk = Risk()
+    slippage_ticks: int = 1
+    tick_size: float = 0.1
+    lot_size: float = 0.001
+    # Neu in Loop 3:
+    cooldown_bars: int = 0          # 0 = aus; sonst Wartezeit in 1m-Bars nach Exit
+    trade_hours: list[int] = []     # z.B. [0,1,...,23]; leer = keine Einschränkung
+
 
 SETTINGS = Settings()
