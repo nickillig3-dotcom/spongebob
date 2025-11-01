@@ -1,0 +1,12 @@
+{
+  "ema_fast_1m": 7,
+  "ema_slow_1m": 26,
+  "ema_fast_3m": 21,
+  "ema_slow_3m": 34,
+  "ema_trend_long": 233,
+  "atr_period_3m": 14,
+  "atr_mult_stop": 1.5,
+  "tp_rr": 1.5,
+  "min_atr_pct": 0.0012,
+  "min_ema_gap_pct": 0.0004
+}
