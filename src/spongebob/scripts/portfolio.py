@@ -14,28 +14,36 @@ def main():
     df = pd.read_csv(eq_path, parse_dates=["time"])
     if "symbol" not in df.columns:
         print("symbol column missing in equity.csv"); return
+    if df.empty:
+        print("equity.csv is empty"); return
 
-    # pro Symbol auf NAV normalisieren
-    navs = []
+    # NAV je Symbol auf gemeinsame Zeitachse bringen
+    nav_frames = []
     for sym, g in df.groupby("symbol"):
         g = g.sort_values("time").copy()
         base = g["equity"].iloc[0]
-        g["nav"] = g["equity"] / base
-        navs.append(g[["time","nav"]].rename(columns={"nav": sym}))
-    merged = navs[0]
-    for g in navs[1:]:
-        merged = pd.merge_asof(merged.sort_values("time"), g.sort_values("time"), on="time", direction="nearest")
-    merged = merged.set_index("time").ffill()
+        if base == 0 or not np.isfinite(base):
+            continue
+        nav = (g["equity"] / base).rename(sym)
+        nav.index = g["time"]
+        nav_frames.append(nav.to_frame())
 
-    # Equal-Weight-Portfolio
-    peq = (merged["portfolio_nav"] * args.equity0).rename("equity").to_frame()
-    peq.index.name = "time"      # <--- NEU: Index benennen
+    if not nav_frames:
+        print("no symbol navs to aggregate"); return
+
+    merged = pd.concat(nav_frames, axis=1).sort_index().ffill()
+
+    # Equal-weight Portfolio NAV
+    port_nav = merged.mean(axis=1, skipna=True)
+
+    peq = (port_nav * args.equity0).rename("equity").to_frame()
+    peq.index.name = "time"                 # wichtig für CSV-Header
     peq.to_csv(os.path.join(args.report_dir, "portfolio_equity.csv"))
 
-    # Kennzahlen (täglich)
+    # Metriken (täglich)
     daily = peq["equity"].resample("1D").last().ffill()
-    ret_daily = daily.pct_change().dropna()
-    sharpe = (ret_daily.mean() / ret_daily.std() * np.sqrt(365.0)) if ret_daily.std() > 0 else 0.0
+    retd = daily.pct_change().dropna()
+    sharpe = (retd.mean()/retd.std()*np.sqrt(365.0)) if retd.std() > 0 else 0.0
     max_dd = (peq["equity"]/peq["equity"].cummax() - 1.0).min()
     total_return = peq["equity"].iloc[-1] / peq["equity"].iloc[0] - 1.0
     n_days = max(1.0, len(daily))
