@@ -58,12 +58,28 @@ def main():
         print("No results.")
         return
 
+    # ✅ Neuer, robuster Export-Block
     out_dir = os.path.join("reports", "latest")
     os.makedirs(out_dir, exist_ok=True)
 
-    pd.concat(curves).to_csv(os.path.join(out_dir, "equity.csv"))
-    (pd.concat(all_trades) if all_trades else pd.DataFrame()).to_csv(os.path.join(out_dir, "trades.csv"), index=False)
-    pd.DataFrame(metrics_list).to_json(os.path.join(out_dir, "metrics.json"), orient="records", indent=2)
+    eq_all = pd.concat(curves)
+    # Immer mit Spaltenüberschriften schreiben
+    trade_cols = ["open_time","close_time","side","entry","exit","qty","pnl","fee","symbol","stop","take"]
+    if all_trades:
+        trades_all = pd.concat(all_trades, ignore_index=True)
+        # Fallback: fehlende Spalten ergänzen
+        for c in trade_cols:
+            if c not in trades_all.columns:
+                trades_all[c] = pd.Series(dtype="float64" if c not in ["side","symbol"] else "object")
+    else:
+        trades_all = pd.DataFrame(columns=trade_cols)
+
+    metrics_df = pd.DataFrame(metrics_list)
+
+    eq_all.to_csv(os.path.join(out_dir, "equity.csv"))
+    trades_all.to_csv(os.path.join(out_dir, "trades.csv"), index=False)
+    metrics_df.to_json(os.path.join(out_dir, "metrics.json"), orient="records", indent=2)
+
     print("Saved reports to:", out_dir)
 
 if __name__ == "__main__":
