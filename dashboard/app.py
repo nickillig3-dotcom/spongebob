@@ -26,7 +26,6 @@ with tab1:
         try:
             peq = pd.read_csv(port_path)
             if "time" not in peq.columns:
-                # Fallback: Index-Spalte ohne Namen
                 idx_cols = [c for c in peq.columns if c.lower().startswith("unnamed")]
                 if idx_cols:
                     peq = peq.rename(columns={idx_cols[0]: "time"})
@@ -40,6 +39,7 @@ with tab1:
             st.warning(f"Kann portfolio_equity.csv nicht lesen: {e}")
     else:
         st.info("portfolio_equity.csv fehlt – erst `python -m spongebob.scripts.portfolio` ausführen.")
+
 
 with tab2:
     if os.path.exists(eq_path):
