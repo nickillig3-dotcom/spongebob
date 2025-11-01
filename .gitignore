@@ -41,3 +41,9 @@ reports/
 # Secrets
 .env
 .env.*
+# allow committing snapshots of reports
+reports/
+!reports/.gitkeep
+!reports/opt/**
+!reports/snapshots/**
+
