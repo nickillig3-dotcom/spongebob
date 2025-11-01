@@ -61,14 +61,21 @@ class MTFMomentum:
         for key in ["15m","30m","1h"]:
             aligned[f"{key}_ema_trend"] = frames[key]["ema_trend"].reindex(aligned.index, method='ffill')
 
-        long_trend  = (aligned["3m_ema_fast"] > aligned["3m_ema_slow"]) & \
-                      (aligned["close"] > aligned["15m_ema_trend"]) & \
-                      (aligned["close"] > aligned["30m_ema_trend"]) & \
-                      (aligned["close"] > aligned["1h_ema_trend"])
-        short_trend = (aligned["3m_ema_fast"] < aligned["3m_ema_slow"]) & \
-                      (aligned["close"] < aligned["15m_ema_trend"]) & \
-                      (aligned["close"] < aligned["30m_ema_trend"]) & \
-                      (aligned["close"] < aligned["1h_ema_trend"])
+        # Trend-Votes über 15m/30m/1h (Mehrheit genügt)
+        votes_long = (
+            (aligned["close"] > aligned["15m_ema_trend"]).astype(int) +
+            (aligned["close"] > aligned["30m_ema_trend"]).astype(int) +
+            (aligned["close"] > aligned["1h_ema_trend"]).astype(int)
+        )
+        votes_short = (
+            (aligned["close"] < aligned["15m_ema_trend"]).astype(int) +
+            (aligned["close"] < aligned["30m_ema_trend"]).astype(int) +
+            (aligned["close"] < aligned["1h_ema_trend"]).astype(int)
+        )
+
+        long_trend  = (aligned["3m_ema_fast"] > aligned["3m_ema_slow"]) & (votes_long >= 2)
+        short_trend = (aligned["3m_ema_fast"] < aligned["3m_ema_slow"]) & (votes_short >= 2)
+
 
         cross_up   = (aligned["ema_fast_1m"] > aligned["ema_slow_1m"]) & (aligned["ema_fast_1m"].shift(1) <= aligned["ema_slow_1m"].shift(1))
         cross_down = (aligned["ema_fast_1m"] < aligned["ema_slow_1m"]) & (aligned["ema_fast_1m"].shift(1) >= aligned["ema_slow_1m"].shift(1))
