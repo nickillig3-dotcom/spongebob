@@ -30,7 +30,7 @@ def main():
 
     params = Params()
     if args.params_file:
-        with open(args.params_file, "r", encoding="utf-8") as f:
+        with open(args.params_file, "r", encoding="utf-8-sig") as f:
             overrides = json.load(f)
         params = Params(**overrides)
 
